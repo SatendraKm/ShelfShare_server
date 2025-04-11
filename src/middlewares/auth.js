@@ -6,7 +6,7 @@ const userAuth = async (req, res, next) => {
     if (!token) {
       return res.status(400).send({ message: "Token not found!" });
     }
-    const decoded = await jwt.verify(token, "Dev-Tinder-jwt-sectet-key", {
+    const decoded = await jwt.verify(token, process.env.JWT_SECRET_KEY, {
       expiresIn: "7d",
     });
     const user = await User.findById(decoded.userId);

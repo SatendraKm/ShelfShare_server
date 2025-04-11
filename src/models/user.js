@@ -64,7 +64,7 @@ userSchema.methods.getJWT = async function () {
   const user = this;
   const token = await jwt.sign(
     { userId: user._id },
-    "Dev-Tinder-jwt-sectet-key",
+    process.env.JWT_SECRET_KEY,
     {
       expiresIn: "7d",
     }
