@@ -63,14 +63,8 @@ authRouter.post("/login", async (req, res) => {
 
     // creating JWT token
     const token = await user.getJWT();
-    const cookieDomain =
-      process.env.NODE_ENV === "production"
-        ? "shelf-share-web.vercel.app"
-        : undefined;
     res.cookie("token", token, {
       expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      path: "/",
-      domain: cookieDomain,
       secure: process.env.NODE_ENV === "production", // true on Render/Vercel
       httpOnly: true,
       sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", // for cross-origin cookies (Vercel <-> Render)
