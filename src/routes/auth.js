@@ -65,9 +65,9 @@ authRouter.post("/login", async (req, res) => {
     const token = await user.getJWT();
     res.cookie("token", token, {
       expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      secure: process.env.NODE_ENV === "production", // true on Render
+      secure: process.env.NODE_ENV === "production", // true on Render/Vercel
       httpOnly: true,
-      credentials: true,
+      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", // for cross-origin cookies (Vercel <-> Render)
     });
     res.send({ message: "User Logged In successfully", userData });
   } catch (error) {
