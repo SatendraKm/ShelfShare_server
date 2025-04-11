@@ -8,6 +8,19 @@ const bcrypt = require("bcrypt");
 
 const profileRouter = express.Router();
 
+profileRouter.get("/profile", userAuth, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.status(404).send({ message: "User not found" });
+    } else {
+      return res.status(200).send({ userData: user });
+    }
+  } catch (error) {
+    res.status(400).send({ message: error.message });
+  }
+});
+
 profileRouter.get("/profile/view", userAuth, async (req, res) => {
   try {
     const user = req.user;
