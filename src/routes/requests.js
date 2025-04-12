@@ -1,6 +1,6 @@
 const express = require("express");
 const { userAuth } = require("../middlewares/auth");
-const BookRequest = require("../models/BookRequest");
+const BookRequest = require("../models/bookRequest");
 const Book = require("../models/book"); // To check book details for request creation
 
 const requestRouter = express.Router();
