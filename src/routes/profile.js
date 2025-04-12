@@ -14,7 +14,7 @@ profileRouter.get("/profile", userAuth, async (req, res) => {
     if (!user) {
       return res.status(404).send({ message: "User not found" });
     } else {
-      return res.status(200).send({ userData: user });
+      return res.status(200).send({ data: user });
     }
   } catch (error) {
     res.status(400).send({ message: error.message });

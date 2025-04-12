@@ -8,46 +8,58 @@ const {
   loginDataValidation,
 } = require("../utils/validation");
 
-authRouter.post("/signup", upload.single("profileImage"), async (req, res) => {
-  try {
-    const { fullName, phoneNumber, emailId, password, role } = req.body;
+authRouter.post("/signup", (req, res) => {
+  upload.single("profileImage")(req, res, async (err) => {
+    try {
+      if (err) {
+        throw new Error("Error uploading image");
+      }
 
-    signUpDataValidation(req);
+      const { fullName, phoneNumber, emailId, password, role } = req.body;
 
-    const existingUser = await User.findOne({ emailId });
-    if (existingUser) {
-      throw new Error("User with this email already exists");
+      signUpDataValidation(req);
+
+      const existingUser = await User.findOne({ emailId });
+      if (existingUser) {
+        throw new Error("User with this email already exists");
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 8);
+
+      const userData = {
+        fullName,
+        phoneNumber,
+        role,
+        emailId,
+        password: hashedPassword,
+      };
+
+      if (req.file && req.file.path) {
+        userData.photoUrl = req.file.path;
+      }
+
+      const user = new User(userData);
+
+      await user.save();
+
+      const { password: pwd, ...userDataWithoutPassword } = user.toObject();
+
+      const token = await user.getJWT();
+      res.cookie("token", token, {
+        expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        secure: process.env.NODE_ENV === "production",
+        httpOnly: true,
+        sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+      });
+
+      res.json({
+        message: "User Created successfully",
+        data: userDataWithoutPassword,
+      });
+    } catch (error) {
+      res.status(400).send({ message: error.message });
     }
-
-    const hashedPassword = await bcrypt.hash(password, 8);
-
-    const profileImageUrl = req.file ? req.file.path : null;
-
-    const user = new User({
-      fullName,
-      phoneNumber,
-      role,
-      emailId,
-      password: hashedPassword,
-      photoUrl: profileImageUrl, // Add this field to your schema
-    });
-
-    await user.save();
-
-    const { password: pwd, ...userData } = user.toObject();
-
-    const token = await user.getJWT();
-    res.cookie("token", token, {
-      expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      secure: process.env.NODE_ENV === "production",
-      httpOnly: true,
-      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
-    });
-
-    res.json({ message: "User Created successfully", data: userData });
-  } catch (error) {
-    res.status(400).send({ message: error.message });
-  }
+  });
 });
 
 authRouter.post("/login", async (req, res) => {

@@ -44,13 +44,6 @@ const userSchema = new mongoose.Schema(
     },
     photoUrl: {
       type: String,
-      default:
-        "https://www.pngitem.com/pimgs/m/146-1468479_my-profile-icon-blank-profile-picture-circle-hd.png",
-      validate(value) {
-        if (!validator.isURL(value)) {
-          throw new Error("Enter a valid image URL!");
-        }
-      },
     },
   },
   { timestamps: true }

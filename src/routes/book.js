@@ -1,132 +1,235 @@
 const express = require("express");
 const { userAuth } = require("../middlewares/auth");
 const Book = require("../models/book");
+const upload = require("../middlewares/multer");
 
 const bookRouter = express.Router();
 
-module.exports = bookRouter;
-/*
-const express = require("express");
-const { userAuth } = require("../middlewares/auth");
-const Users = require("../models/user");
-const ConnectionRequest = require("../models/connectionRequest");
-const userRouter = express.Router();
+bookRouter.post(
+  "/book/new",
+  userAuth,
+  upload.single("bookImage"),
+  async (req, res) => {
+    try {
+      const { title, author, genre, location, description } = req.body;
 
-// get all the pending requests for the loggedin user
-userRouter.get("/user/requests/recieved", userAuth, async (req, res) => {
-  try {
-    const loggedInUser = req.user;
-
-    const connectionRequests = await ConnectionRequest.find({
-      toUserId: loggedInUser._id,
-      status: "interested",
-    }).populate("fromUserId", [
-      "firstName",
-      "lastName",
-      "photoUrl",
-      "age",
-      "gender",
-      "about",
-      "skills",
-    ]);
-
-    res.json({
-      message: "Recieved requests",
-      connectionRequests,
-    });
-  } catch (error) {
-    res.status(400).send({ message: error.message });
-  }
-});
-
-userRouter.get("/user/connections", userAuth, async (req, res) => {
-  try {
-    const loggedInUser = req.user;
-    const connectionRequests = await ConnectionRequest.find({
-      $or: [
-        { fromUserId: loggedInUser._id, status: "accepted" },
-        { toUserId: loggedInUser._id, status: "accepted" },
-      ],
-    })
-      .populate("fromUserId", [
-        "firstName",
-        "lastName",
-        "photoUrl",
-        "age",
-        "gender",
-        "about",
-        "skills",
-      ])
-      .populate("toUserId", [
-        "firstName",
-        "lastName",
-        "photoUrl",
-        "age",
-        "gender",
-        "about",
-        "skills",
-      ]);
-
-    const data = connectionRequests.map((row) => {
-      if (row.fromUserId._id.toString() === loggedInUser._id.toString()) {
-        return row.toUserId;
+      // Validate required fields
+      if (!title || !author || !genre || !location || !description) {
+        return res.status(400).json({ message: "All fields are required." });
       }
-      return row.fromUserId;
-    });
 
-    res.json({
-      message: "Connections",
-      data,
-    });
-  } catch (error) {
-    res.status(400).send({ message: error.message });
-  }
-});
+      // Image upload handling (optional)
+      const imageUrl = req.file ? req.file.path : null;
 
-userRouter.get("/feed", userAuth, async (req, res) => {
-  try {
-    const loggedInUser = req.user;
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    if (limit > 50) {
-      limit = 50;
+      // Create the book document
+      const book = await Book.create({
+        title,
+        author,
+        genre,
+        location,
+        description,
+        imageUrl,
+        ownerId: req.user._id,
+      });
+
+      res.status(201).json({ message: "Book added successfully", data: book });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
     }
-    const skip = (page - 1) * limit;
-    // fetching all the connections of the loggedin user
-    const connectionRequests = await ConnectionRequest.find({
-      $or: [{ fromUserId: loggedInUser._id }, { toUserId: loggedInUser._id }],
-    }).select(["fromUserId", "toUserId"]);
-    // creating a set of user ids to hide them from the feed
-    const hiddenUserIds = new Set();
-    connectionRequests.forEach((req) => {
-      hiddenUserIds.add(req.toUserId.toString());
-      hiddenUserIds.add(req.fromUserId.toString());
+  }
+);
+
+bookRouter.get("/book", async (req, res) => {
+  try {
+    // Extract query parameters
+    const { title, author, genre, location, status, page, limit } = req.query;
+
+    // Build filter query
+    const filter = {};
+
+    if (title) {
+      filter.title = { $regex: title, $options: "i" }; // case-insensitive search
+    }
+    if (author) {
+      filter.author = { $regex: author, $options: "i" };
+    }
+    if (genre) {
+      filter.genre = { $regex: genre, $options: "i" };
+    }
+    if (location) {
+      filter.location = { $regex: location, $options: "i" };
+    }
+    if (status) {
+      filter.status = status;
+    }
+
+    // Set pagination defaults or use provided values
+    const pageNumber = parseInt(page) || 1;
+    const limitNumber = parseInt(limit) || 10;
+    const skipNumber = (pageNumber - 1) * limitNumber;
+
+    // Count total documents matching the filter
+    const totalBooks = await Book.countDocuments(filter);
+
+    // Fetch books matching filter with pagination
+    const books = await Book.find(filter)
+      .skip(skipNumber)
+      .limit(limitNumber)
+      .sort({ createdAt: -1 }); // newest first
+
+    res.status(200).json({
+      message: "Books fetched successfully",
+      total: totalBooks,
+      page: pageNumber,
+      limit: limitNumber,
+      data: books,
     });
-    // fetching all the users except the loggedin user and the connections of the loggedin user
-    const users = await Users.find({
-      $and: [
-        { _id: { $nin: Array.from(hiddenUserIds) } },
-        { _id: { $ne: loggedInUser._id } },
-      ],
-    })
-      .select([
-        "firstName",
-        "lastName",
-        "photoUrl",
-        "about",
-        "skills",
-        "age",
-        "gender",
-      ])
-      .limit(limit)
-      .skip(skip);
-    // sending the response
-    res.json({ message: "Feed", users });
   } catch (error) {
-    res.status(400).send({ message: error.message });
+    res.status(500).json({ message: error.message });
   }
 });
 
-module.exports = userRouter;
+bookRouter.get("/book/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const book = await Book.findById(id);
 
-*/
+    if (!book) {
+      return res.status(404).json({ message: "Book not found" });
+    }
+
+    res
+      .status(200)
+      .json({ message: "Book retrieved successfully", data: book });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+bookRouter.put(
+  "/book/:id",
+  userAuth,
+  upload.single("imageUrl"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body; // Text fields from FormData
+
+      // Optional: If a new file is uploaded, set imageUrl to its path
+      if (req.file) {
+        updates.imageUrl = req.file.path;
+      }
+
+      // Find book
+      const book = await Book.findById(id);
+      if (!book) {
+        return res.status(404).json({ message: "Book not found" });
+      }
+
+      // Verify that the logged-in user is the owner
+      if (book.ownerId.toString() !== req.user._id.toString()) {
+        return res
+          .status(403)
+          .json({ message: "Only the owner can update this book" });
+      }
+
+      // Allowed fields update (for example, title, description, etc.)
+      const allowedUpdates = [
+        "title",
+        "author",
+        "genre",
+        "location",
+        "description",
+        "imageUrl",
+      ];
+      allowedUpdates.forEach((field) => {
+        if (updates[field] !== undefined) {
+          book[field] = updates[field];
+        }
+      });
+
+      await book.save();
+      res
+        .status(200)
+        .json({ message: "Book updated successfully", data: book });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+bookRouter.delete("/book/:id", userAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Find the book by its ID
+    const book = await Book.findById(id);
+    if (!book) {
+      return res.status(404).json({ message: "Book not found" });
+    }
+
+    // Verify that the logged-in user is the owner of the book
+    if (book.ownerId.toString() !== req.user._id.toString()) {
+      return res
+        .status(403)
+        .json({ message: "Only the owner can delete this book" });
+    }
+
+    // Delete the book
+    await book.deleteOne();
+
+    res.status(200).json({ message: "Book deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+bookRouter.get("/my-books", userAuth, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const books = await Book.find({ ownerId: userId }).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      message: "Books fetched successfully",
+      data: books,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+bookRouter.post("/book/:id/mark-returned", userAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const book = await Book.findById(id);
+    if (!book) {
+      return res.status(404).json({ message: "Book not found" });
+    }
+
+    // Only the owner can mark the book as returned
+    if (book.ownerId.toString() !== req.user._id.toString()) {
+      return res
+        .status(403)
+        .json({ message: "Only the owner can mark the book as returned" });
+    }
+
+    // Ensure it’s currently rented
+    if (book.status !== "rented") {
+      return res
+        .status(400)
+        .json({ message: "Only rented books can be marked as returned" });
+    }
+
+    // Reset book status
+    book.status = "available";
+    book.borrowerId = null;
+    await book.save();
+
+    res.status(200).json({ message: "Book marked as returned", data: book });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+module.exports = bookRouter;
