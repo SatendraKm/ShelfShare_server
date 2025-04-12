@@ -2,38 +2,40 @@ const express = require("express");
 const User = require("../models/user");
 const bcrypt = require("bcrypt");
 const authRouter = express.Router();
+const upload = require("../middlewares/multer");
 const {
   signUpDataValidation,
   loginDataValidation,
 } = require("../utils/validation");
 
-authRouter.post("/signup", async (req, res) => {
+authRouter.post("/signup", upload.single("profileImage"), async (req, res) => {
   try {
     const { fullName, phoneNumber, emailId, password, role } = req.body;
-    // validating the signup data
+
     signUpDataValidation(req);
-    // check if user already exists
+
     const existingUser = await User.findOne({ emailId });
     if (existingUser) {
-      // return res
-      //   .status(400)
-      //   .send({ message: "User with this email already exists" });
       throw new Error("User with this email already exists");
     }
 
-    // Encrypting the password
     const hashedPassword = await bcrypt.hash(password, 8);
+
+    const profileImageUrl = req.file ? req.file.path : null;
+
     const user = new User({
       fullName,
       phoneNumber,
       role,
       emailId,
       password: hashedPassword,
+      photoUrl: profileImageUrl, // Add this field to your schema
     });
+
     await user.save();
-    // removing password from the response
+
     const { password: pwd, ...userData } = user.toObject();
-    // Generate token and set cookie
+
     const token = await user.getJWT();
     res.cookie("token", token, {
       expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -47,6 +49,7 @@ authRouter.post("/signup", async (req, res) => {
     res.status(400).send({ message: error.message });
   }
 });
+
 authRouter.post("/login", async (req, res) => {
   const { emailId, password } = req.body;
   try {
