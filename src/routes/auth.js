@@ -9,7 +9,7 @@ const {
 
 authRouter.post("/signup", async (req, res) => {
   try {
-    const { firstName, lastName, emailId, password } = req.body;
+    const { fullName, phoneNumber, emailId, password, role } = req.body;
     // validating the signup data
     signUpDataValidation(req);
     // check if user already exists
@@ -24,15 +24,25 @@ authRouter.post("/signup", async (req, res) => {
     // Encrypting the password
     const hashedPassword = await bcrypt.hash(password, 8);
     const user = new User({
-      firstName,
-      lastName,
+      fullName,
+      phoneNumber,
+      role,
       emailId,
       password: hashedPassword,
     });
     await user.save();
     // removing password from the response
     const { password: pwd, ...userData } = user.toObject();
-    res.json({ message: "User Created successfully", userData });
+    // Generate token and set cookie
+    const token = await user.getJWT();
+    res.cookie("token", token, {
+      expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+    });
+
+    res.json({ message: "User Created successfully", data: userData });
   } catch (error) {
     res.status(400).send({ message: error.message });
   }
@@ -69,7 +79,7 @@ authRouter.post("/login", async (req, res) => {
       httpOnly: true,
       sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", // for cross-origin cookies (Vercel <-> Render)
     });
-    res.send({ message: "User Logged In successfully", userData });
+    res.send({ message: "User Logged In successfully", data: userData });
   } catch (error) {
     res.status(400).send({ message: error.message });
   }

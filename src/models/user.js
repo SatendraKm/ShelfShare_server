@@ -5,11 +5,7 @@ const bcrypt = require("bcrypt");
 
 const userSchema = new mongoose.Schema(
   {
-    firstName: {
-      type: String,
-      required: true,
-    },
-    lastName: {
+    fullName: {
       type: String,
       required: true,
     },
@@ -29,15 +25,21 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    age: {
-      type: Number,
-      min: 18,
-    },
-    gender: {
+    phoneNumber: {
       type: String,
+      required: true,
+      validate(value) {
+        if (!validator.isMobilePhone(value, "any")) {
+          throw new Error("Phone number is not valid!");
+        }
+      },
+    },
+    role: {
+      type: String,
+      required: true,
       enum: {
-        values: ["male", "female", "others"],
-        message: "{VALUE} is not a valid gender!",
+        values: ["owner", "seeker"],
+        message: "{VALUE} is not a valid role!",
       },
     },
     photoUrl: {
@@ -49,13 +51,6 @@ const userSchema = new mongoose.Schema(
           throw new Error("Enter a valid image URL!");
         }
       },
-    },
-    about: {
-      type: String,
-      default: "Hey! I am using Dev-Tinder.",
-    },
-    skills: {
-      type: [String],
     },
   },
   { timestamps: true }

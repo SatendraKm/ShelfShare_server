@@ -9,6 +9,7 @@ const userAuth = async (req, res, next) => {
     const decoded = await jwt.verify(token, process.env.JWT_SECRET_KEY, {
       expiresIn: "7d",
     });
+    console.log(decoded);
     const user = await User.findById(decoded.userId);
     if (!user) {
       return res.status(404).send({ message: "User not found" });
