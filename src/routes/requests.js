@@ -46,6 +46,7 @@ requestRouter.post("/request", userAuth, async (req, res) => {
         .json({ message: "You already have a pending request for this book." });
     }
 
+    // Create a new BookRequest
     const newRequest = new BookRequest({
       bookId,
       requesterId: req.user._id,
@@ -54,7 +55,20 @@ requestRouter.post("/request", userAuth, async (req, res) => {
       status: "pending", // default status
     });
 
+    // Save the new request
     await newRequest.save();
+
+    // Push the new request ID to the book's requests array
+    book.requests.push(newRequest._id);
+    await book.save();
+
+    // Populate the necessary fields for the response
+    await newRequest.populate([
+      { path: "bookId", select: "title author" },
+      { path: "requesterId", select: "fullName emailId" },
+      { path: "ownerId", select: "fullName emailId" },
+    ]);
+
     res
       .status(201)
       .json({ message: "Request created successfully", data: newRequest });
@@ -71,6 +85,7 @@ requestRouter.get("/request/sent", userAuth, async (req, res) => {
   try {
     const requests = await BookRequest.find({ requesterId: req.user._id })
       .populate("bookId", "title author")
+      .populate("ownerId", "fullName emailId")
       .sort({ createdAt: -1 });
     res
       .status(200)
@@ -88,6 +103,7 @@ requestRouter.get("/request/received", userAuth, async (req, res) => {
   try {
     const requests = await BookRequest.find({ ownerId: req.user._id })
       .populate("bookId", "title author")
+      .populate("requesterId", "fullName emailId")
       .sort({ createdAt: -1 });
     res.status(200).json({
       message: "Received requests fetched successfully",
@@ -160,7 +176,7 @@ requestRouter.put("/request/:id/accept", userAuth, async (req, res) => {
     // Optionally update the book as well (set borrower and update status)
     const book = await Book.findById(requestDoc.bookId);
     if (book) {
-      book.status = "rented"; // or "exchanged" based on requestDoc.type
+      book.status = requestDoc.type; // or "exchanged" based on requestDoc.type
       book.borrowerId = requestDoc.requesterId;
       await book.save();
     }
@@ -217,20 +233,30 @@ requestRouter.put("/request/:id/cancel", userAuth, async (req, res) => {
     if (!requestDoc) {
       return res.status(404).json({ message: "Request not found" });
     }
+
     // Validate that the logged-in user is the requester
     if (requestDoc.requesterId.toString() !== req.user._id.toString()) {
       return res
         .status(403)
         .json({ message: "Only the requester can cancel this request" });
     }
+
     // Allow cancellation only if it's still pending
     if (requestDoc.status !== "pending") {
       return res
         .status(400)
         .json({ message: "Only pending requests can be cancelled" });
     }
+
+    // Update request status
     requestDoc.status = "cancelled";
     await requestDoc.save();
+
+    // Remove request from Book's requests array
+    await Book.findByIdAndUpdate(requestDoc.bookId, {
+      $pull: { requests: requestDoc._id },
+    });
+
     res
       .status(200)
       .json({ message: "Request cancelled successfully", data: requestDoc });
@@ -239,23 +265,66 @@ requestRouter.put("/request/:id/cancel", userAuth, async (req, res) => {
   }
 });
 
-requestRouter.get("/requests/:id", async (req, res) => {
-  const { id } = req.params;
-
-  // Validate ID first
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ message: "Invalid request ID" });
-  }
-
+requestRouter.patch("/request/:id/status", userAuth, async (req, res) => {
   try {
-    const request = await BookRequest.findById(id);
-    if (!request) {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!["accepted", "rejected", "cancelled"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+
+    const requestDoc = await BookRequest.findById(id);
+    if (!requestDoc) {
       return res.status(404).json({ message: "Request not found" });
     }
 
-    res.status(200).json({ message: "Request fetched", data: request });
+    // Only the requester or owner can update status
+    if (
+      requestDoc.requesterId.toString() !== req.user._id &&
+      requestDoc.ownerId.toString() !== req.user._id
+    ) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    if (requestDoc.status !== "pending") {
+      return res
+        .status(400)
+        .json({ message: "Request has already been handled" });
+    }
+
+    requestDoc.status = status;
+    await requestDoc.populate([
+      { path: "bookId", select: "title author" },
+      { path: "requesterId", select: "fullName emailId" },
+      { path: "ownerId", select: "fullName emailId" },
+    ]);
+    await requestDoc.save();
+
+    // 🔁 Reject all other pending requests for the same book
+    if (status === "accepted") {
+      await BookRequest.updateMany(
+        {
+          bookId: requestDoc.bookId,
+          _id: { $ne: requestDoc._id },
+          status: "pending",
+        },
+        { $set: { status: "rejected" } }
+      );
+
+      // Also update book status and borrower
+      const book = await Book.findById(requestDoc.bookId);
+      book.status = requestDoc.type === "rent" ? "rented" : "exchanged";
+      book.borrowerId = requestDoc.requesterId;
+      await book.save();
+    }
+
+    res
+      .status(200)
+      .json({ message: "Request status updated", request: requestDoc });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
   }
 });
 

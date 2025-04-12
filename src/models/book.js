@@ -25,11 +25,6 @@ const bookSchema = new mongoose.Schema(
     },
     imageUrl: {
       type: String,
-      validate(value) {
-        if (!validator.isURL(value)) {
-          throw new Error("Enter a valid image URL!");
-        }
-      },
     },
     ownerId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -45,6 +40,12 @@ const bookSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    requests: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "BookRequest",
+      },
+    ],
   },
   { timestamps: true }
 );

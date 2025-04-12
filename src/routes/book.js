@@ -73,9 +73,11 @@ bookRouter.get("/book", async (req, res) => {
 
     // Fetch books matching filter with pagination
     const books = await Book.find(filter)
+      .populate("ownerId", "fullName emailId photoUrl")
+      .populate("borrowerId", "fullName emailId photoUrl")
       .skip(skipNumber)
       .limit(limitNumber)
-      .sort({ createdAt: -1 }); // newest first
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       message: "Books fetched successfully",
@@ -92,15 +94,28 @@ bookRouter.get("/book", async (req, res) => {
 bookRouter.get("/book/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const book = await Book.findById(id);
+
+    const book = await Book.findById(id)
+      .populate("ownerId", "fullName emailId photoUrl")
+      .populate("borrowerId", "fullName emailId photoUrl")
+      .populate({
+        path: "requests",
+        populate: [
+          {
+            path: "requesterId",
+            select: "fullName emailId photoUrl",
+          },
+        ],
+      });
 
     if (!book) {
       return res.status(404).json({ message: "Book not found" });
     }
 
-    res
-      .status(200)
-      .json({ message: "Book retrieved successfully", data: book });
+    res.status(200).json({
+      message: "Book retrieved successfully",
+      data: book,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -187,7 +202,16 @@ bookRouter.delete("/book/:id", userAuth, async (req, res) => {
 bookRouter.get("/my-books", userAuth, async (req, res) => {
   try {
     const userId = req.user._id;
-    const books = await Book.find({ ownerId: userId }).sort({ createdAt: -1 });
+    const books = await Book.find({ ownerId: userId })
+      .populate("borrowerId", "fullName emailId photoUrl")
+      .populate({
+        path: "requests",
+        populate: {
+          path: "requesterId",
+          select: "fullName emailId photoUrl",
+        },
+      })
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       message: "Books fetched successfully",
