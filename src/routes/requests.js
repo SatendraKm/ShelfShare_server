@@ -84,7 +84,7 @@ requestRouter.post("/request", userAuth, async (req, res) => {
 requestRouter.get("/request/sent", userAuth, async (req, res) => {
   try {
     const requests = await BookRequest.find({ requesterId: req.user._id })
-      .populate("bookId", "title author")
+      .populate("bookId", "title author imageUrl")
       .populate("ownerId", "fullName emailId")
       .sort({ createdAt: -1 });
     res
@@ -102,8 +102,9 @@ requestRouter.get("/request/sent", userAuth, async (req, res) => {
 requestRouter.get("/request/received", userAuth, async (req, res) => {
   try {
     const requests = await BookRequest.find({ ownerId: req.user._id })
-      .populate("bookId", "title author")
+      .populate("bookId", "title author imageUrl")
       .populate("requesterId", "fullName emailId")
+      .populate("ownerId", "fullName emailId")
       .sort({ createdAt: -1 });
     res.status(200).json({
       message: "Received requests fetched successfully",
@@ -154,37 +155,59 @@ requestRouter.get("/request/:id", userAuth, async (req, res) => {
 requestRouter.put("/request/:id/accept", userAuth, async (req, res) => {
   try {
     const { id } = req.params;
+
     const requestDoc = await BookRequest.findById(id);
     if (!requestDoc) {
       return res.status(404).json({ message: "Request not found" });
     }
-    // Validate that the logged-in user is the owner
+
+    // Only the owner can accept the request
     if (requestDoc.ownerId.toString() !== req.user._id.toString()) {
       return res
         .status(403)
         .json({ message: "Only the owner can accept this request" });
     }
-    // Accept only if the request is pending
+
+    // Only pending requests can be accepted
     if (requestDoc.status !== "pending") {
       return res
         .status(400)
         .json({ message: "Only pending requests can be accepted" });
     }
+
+    // Accept the request
     requestDoc.status = "accepted";
     await requestDoc.save();
 
-    // Optionally update the book as well (set borrower and update status)
+    // Reject all other pending requests for the same book
+    await BookRequest.updateMany(
+      {
+        bookId: requestDoc.bookId,
+        _id: { $ne: requestDoc._id },
+        status: "pending",
+      },
+      { $set: { status: "rejected" } }
+    );
+
+    // Update the book
     const book = await Book.findById(requestDoc.bookId);
     if (book) {
-      book.status = requestDoc.type; // or "exchanged" based on requestDoc.type
+      // Update status and borrower
+      book.status = requestDoc.type === "rent" ? "rented" : "exchanged";
       book.borrowerId = requestDoc.requesterId;
+
+      // Keep only the accepted request in the book.requests array
+      book.requests = [requestDoc._id];
+
       await book.save();
     }
 
-    res
-      .status(200)
-      .json({ message: "Request accepted successfully", data: requestDoc });
+    res.status(200).json({
+      message: "Request accepted successfully",
+      data: requestDoc,
+    });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -279,7 +302,6 @@ requestRouter.patch("/request/:id/status", userAuth, async (req, res) => {
       return res.status(404).json({ message: "Request not found" });
     }
 
-    // Only the requester or owner can update status
     if (
       requestDoc.requesterId.toString() !== req.user._id &&
       requestDoc.ownerId.toString() !== req.user._id
@@ -301,8 +323,9 @@ requestRouter.patch("/request/:id/status", userAuth, async (req, res) => {
     ]);
     await requestDoc.save();
 
-    // 🔁 Reject all other pending requests for the same book
+    // ✅ Only when request is accepted
     if (status === "accepted") {
+      // 🔁 Reject other pending requests
       await BookRequest.updateMany(
         {
           bookId: requestDoc.bookId,
@@ -312,11 +335,22 @@ requestRouter.patch("/request/:id/status", userAuth, async (req, res) => {
         { $set: { status: "rejected" } }
       );
 
-      // Also update book status and borrower
+      // 🔧 Update book details
       const book = await Book.findById(requestDoc.bookId);
-      book.status = requestDoc.type === "rent" ? "rented" : "exchanged";
-      book.borrowerId = requestDoc.requesterId;
-      await book.save();
+      if (book) {
+        if (requestDoc.type === "rent") {
+          book.status = "rented";
+          book.borrowerId = requestDoc.requesterId;
+        } else if (requestDoc.type === "exchange") {
+          book.status = "exchanged";
+          book.borrowerId = requestDoc.requesterId;
+
+          // ⏳ Optional future logic:
+          // Ask the requester to provide their bookId for exchange
+          // Then also mark that book as exchanged with ownerId as borrower
+        }
+        await book.save();
+      }
     }
 
     res

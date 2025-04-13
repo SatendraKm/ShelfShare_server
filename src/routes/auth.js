@@ -12,6 +12,7 @@ authRouter.post("/signup", (req, res) => {
   upload.single("profileImage")(req, res, async (err) => {
     try {
       if (err) {
+        console.log(err);
         throw new Error("Error uploading image");
       }
 
