@@ -5,93 +5,137 @@ const {
   passwordValidation,
 } = require("../utils/validation");
 const bcrypt = require("bcrypt");
+const Book = require("../models/book");
 
 const profileRouter = express.Router();
 
+// ✅ GET Profile Data
 profileRouter.get("/profile", userAuth, async (req, res) => {
   try {
     const user = req.user;
     if (!user) {
       return res.status(404).send({ message: "User not found" });
-    } else {
-      return res.status(200).send({ data: user });
     }
+    res.status(200).send({ data: user });
   } catch (error) {
     res.status(400).send({ message: error.message });
   }
 });
 
-profileRouter.get("/profile/view", userAuth, async (req, res) => {
-  try {
-    const user = req.user;
-    if (!user) {
-      return res.status(404).send({ message: "User not found" });
-    } else {
-      return res.status(200).send(user);
-    }
-  } catch (error) {
-    res.status(400).send({ message: error.message });
-  }
-});
+// ✅ PATCH Profile Data (except password)
 profileRouter.patch("/profile/edit", userAuth, async (req, res) => {
   try {
-    // validate the user data from the request
+    // Validate the user data from the request
     if (!profileDataValidation(req)) {
-      throw new Error("Invalid edit request");
+      throw new Error("Invalid profile update request");
     }
+
     const user = req.user;
-    Object.keys(req.body).forEach((field) => {
+    const allowedFields = ["fullName", "phoneNumber", "photoUrl"];
+    const updates = Object.keys(req.body);
+
+    // Check for invalid fields
+    const isValidOperation = updates.every((update) =>
+      allowedFields.includes(update)
+    );
+    if (!isValidOperation) {
+      throw new Error("Invalid fields in update request");
+    }
+
+    // Update the user fields
+    updates.forEach((field) => {
       user[field] = req.body[field];
     });
+
     await user.save();
+
     res.status(200).send({
-      message: `Profile data of ${
-        user.firstName + " " + user.lastName
-      } updated successfully`,
-      user,
+      message: `Profile of ${user.fullName} updated successfully`,
+      data: user,
     });
   } catch (error) {
     res.status(400).send({ message: error.message });
   }
 });
+
+// ✅ PATCH Password Update
 profileRouter.patch("/profile/password", userAuth, async (req, res) => {
   try {
-    // get the current and new password from the request
     const { currentPassword, newPassword } = req.body;
 
-    // check if the current and new password are provided
     if (!currentPassword || !newPassword) {
       throw new Error("Current and New Password are required!");
     }
 
-    // check if the current is same as new password
     if (currentPassword === newPassword) {
       throw new Error(
         "New password should be different from the current password"
       );
     }
 
-    // get the user from the request
     const user = req.user;
 
-    // validate the new password
+    // Check if current password is valid
+    const isMatch = await user.validatePassword(currentPassword);
+    if (!isMatch) {
+      throw new Error("Current password is incorrect");
+    }
+
+    // Validate the new password
     if (!passwordValidation(newPassword)) {
       throw new Error("Enter a strong password!");
     }
 
-    // Encrypting the password
-    const hashedPassword = await bcrypt.hash(newPassword, 8);
-    user.password = hashedPassword;
-
-    // save the new password
+    // Encrypt and update the new password
+    user.password = await bcrypt.hash(newPassword, 8);
     await user.save();
+
     res.status(200).send({
-      message: `Password of ${
-        user.firstName + " " + user.lastName
-      } has been updated successfully`,
+      message: `Password for ${user.fullName} has been updated successfully`,
     });
   } catch (error) {
     res.status(400).send({ message: error.message });
+  }
+});
+
+profileRouter.get("/user/stats", userAuth, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const role = req.user.role; // Check user's role
+
+    let stats = {};
+
+    if (role === "seeker") {
+      // Seeker: count borrowed and exchanged books
+      stats = {
+        borrowedCount: await Book.countDocuments({
+          requester: userId,
+          status: "approved",
+        }),
+        exchangedCount: await Book.countDocuments({
+          requester: userId,
+          status: "exchanged",
+        }),
+      };
+    } else if (role === "owner") {
+      // Owner: count owned and exchanged books
+      stats = {
+        ownedCount: await Book.countDocuments({
+          owner: userId,
+          status: { $ne: "exchanged" }, // Exclude exchanged books from owned
+        }),
+        exchangedCount: await Book.countDocuments({
+          owner: userId,
+          status: "exchanged",
+        }),
+      };
+    }
+
+    res.status(200).send(stats); // Send the stats based on role
+  } catch (error) {
+    res
+      .status(500)
+      .send({ message: "Failed to fetch stats", error: error.message });
   }
 });
 
