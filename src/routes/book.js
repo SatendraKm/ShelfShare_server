@@ -19,7 +19,7 @@ bookRouter.post(
       }
 
       // Image upload handling (optional)
-      const imageUrl = req.file ? req.file.path : null;
+      const imageUrl = req.file ? req.file.path : "/bookcover.png";
 
       // Create the book document
       const book = await Book.create({
@@ -222,7 +222,21 @@ bookRouter.get("/my-books", userAuth, async (req, res) => {
   }
 });
 
-bookRouter.post("/book/:id/mark-returned", userAuth, async (req, res) => {
+bookRouter.get("/my-rented-books", userAuth, async (req, res) => {
+  try {
+    const books = await Book.find({
+      borrowerId: req.user._id,
+      status: "rented",
+    }).populate("ownerId", "fullName emailId");
+
+    res.json({ data: books });
+  } catch (err) {
+    console.error("Failed to fetch rented books:", err);
+    res.status(500).json({ error: "Failed to fetch rented books" });
+  }
+});
+
+bookRouter.put("/book/:id/mark-returned", userAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -231,11 +245,14 @@ bookRouter.post("/book/:id/mark-returned", userAuth, async (req, res) => {
       return res.status(404).json({ message: "Book not found" });
     }
 
-    // Only the owner can mark the book as returned
-    if (book.ownerId.toString() !== req.user._id.toString()) {
+    // Only the borrower (renter) can mark the book as returned
+    if (
+      !book.borrowerId ||
+      book.borrowerId.toString() !== req.user._id.toString()
+    ) {
       return res
         .status(403)
-        .json({ message: "Only the owner can mark the book as returned" });
+        .json({ message: "You are not authorized to return this book" });
     }
 
     // Ensure it’s currently rented
@@ -252,6 +269,22 @@ bookRouter.post("/book/:id/mark-returned", userAuth, async (req, res) => {
 
     res.status(200).json({ message: "Book marked as returned", data: book });
   } catch (error) {
+    console.error("Error marking book as returned:", error);
+    res.status(500).json({ message: error.message });
+  }
+});
+bookRouter.get("/my-exchanged-books", userAuth, async (req, res) => {
+  try {
+    const books = await Book.find({
+      borrowerId: req.user._id,
+      status: "exchanged",
+    })
+      .populate("ownerId", "fullName emailId") // optional: include owner info
+      .populate("borrowerId", "fullName emailId");
+
+    res.status(200).json({ message: "Exchanged books fetched", data: books });
+  } catch (error) {
+    console.error("Error fetching exchanged books:", error);
     res.status(500).json({ message: error.message });
   }
 });
