@@ -197,7 +197,8 @@ requestRouter.put("/request/:id/accept", userAuth, async (req, res) => {
       book.borrowerId = requestDoc.requesterId;
 
       // Keep only the accepted request in the book.requests array
-      book.requests = [requestDoc._id];
+      // book.requests = [requestDoc._id];
+      book.requests = [];
 
       await book.save();
     }
