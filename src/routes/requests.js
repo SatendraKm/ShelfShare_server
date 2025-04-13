@@ -238,6 +238,9 @@ requestRouter.put("/request/:id/reject", userAuth, async (req, res) => {
     }
     requestDoc.status = "rejected";
     await requestDoc.save();
+    await Book.findByIdAndUpdate(requestDoc.bookId, {
+      $pull: { requests: requestDoc._id },
+    });
     res
       .status(200)
       .json({ message: "Request rejected successfully", data: requestDoc });
