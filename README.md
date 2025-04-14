@@ -33,7 +33,7 @@ The backend of **ShelfShare** is built using **Node.js** and **Express.js**, wit
 cd ShelfShare-server
 ```
 3. Install dependencies:
-   ```bash
+```bash
 npm install
 ```
 4. Create a .env file in the root directory with the following variables:
