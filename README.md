@@ -50,7 +50,7 @@ CLOUDINARY_URL=
 ```
 
 5. Start the local server
-   ```bash
+```bash
 npm start
 ```
 
