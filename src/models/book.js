@@ -33,6 +33,7 @@ const bookSchema = new mongoose.Schema(
     },
     imageUrl: {
       type: String,
+      default: "/bookcover.png",
       validate: {
         validator: (v) => !v || validator.isURL(v),
         message: "Invalid image URL",

@@ -23,17 +23,13 @@ bookRouter.post(
         return res.status(400).json({ message: "All fields are required." });
       }
 
-      const imageUrl = req.file ? req.file.path : "/bookcover.png";
+      const bookData = { title, author, location, genres, description };
 
-      const book = await Book.create({
-        title,
-        author,
-        genres,
-        location,
-        description,
-        imageUrl,
-        ownerId: req.user._id,
-      });
+      if (req.file && req.file.path) {
+        bookData.imageUrl = req.file.path;
+      }
+
+      const book = await Book.create({ ...bookData, ownerId: req.user._id });
 
       res.status(201).json({ message: "Book added successfully", data: book });
     } catch (error) {
