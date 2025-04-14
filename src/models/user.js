@@ -45,10 +45,6 @@ const userSchema = new mongoose.Schema(
     photoUrl: {
       type: String,
       default: "/navphoto.webp",
-      validate: {
-        validator: (v) => !v || validator.isURL(v),
-        message: "Invalid image URL",
-      },
     },
   },
   { timestamps: true }
