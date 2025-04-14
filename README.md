@@ -23,12 +23,10 @@ The backend of **ShelfShare** is built using **Node.js** and **Express.js**, wit
 ## Backend Setup
 
 1. Clone the repository:
-   ```bash
-   https://github.com/SatendraKm/ShelfShare_server.git
-   ```
-
+```bash
+https://github.com/SatendraKm/ShelfShare_server.git
+```
 2. Navigate to the project directory:
-
 ```bash
 cd ShelfShare-server
 ```
@@ -38,7 +36,7 @@ npm install
 ```
 4. Create a .env file in the root directory with the following variables:
 ```bash
-MONGODB_URI=
+MONGODB_URI= mongodb+srv://<user>:<password>@cluster0.qnpfkoe.mongodb.net/Shelf-Share?retryWrites=true&w=majority&appName=Cluster0
 CLIENT_URL=http://localhost:3000
 PORT=5000
 JWT_SECRET_KEY=ShelfShare::secret
@@ -55,5 +53,5 @@ npm start
 ```
 
 The server will run on http://localhost:5000 (or a different port if specified).
-
-## render deployed link- https://shelfshare-server.onrender.com
+## Or else just test the APIs in postman with the render deployed link- https://shelfshare-server.onrender.com
+BTW you can also run frontend locally and access backend by setting render backend ulr for api in the .env file
