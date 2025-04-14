@@ -11,21 +11,24 @@ bookRouter.post(
   upload.single("bookImage"),
   async (req, res) => {
     try {
-      const { title, author, genre, location, description } = req.body;
+      let { title, author, genres, location, description } = req.body;
+
+      // Ensure genres is always an array
+      if (!Array.isArray(genres)) {
+        genres = genres ? [genres] : [];
+      }
 
       // Validate required fields
-      if (!title || !author || !genre || !location || !description) {
+      if (!title || !author || !genres.length || !location || !description) {
         return res.status(400).json({ message: "All fields are required." });
       }
 
-      // Image upload handling (optional)
       const imageUrl = req.file ? req.file.path : "/bookcover.png";
 
-      // Create the book document
       const book = await Book.create({
         title,
         author,
-        genre,
+        genres,
         location,
         description,
         imageUrl,
@@ -54,7 +57,7 @@ bookRouter.get("/book", async (req, res) => {
       filter.author = { $regex: author, $options: "i" };
     }
     if (genre) {
-      filter.genre = { $regex: genre, $options: "i" };
+      filter.genres = { $regex: genre, $options: "i" };
     }
     if (location) {
       filter.location = { $regex: location, $options: "i" };
@@ -128,35 +131,43 @@ bookRouter.put(
   async (req, res) => {
     try {
       const { id } = req.params;
-      const updates = req.body; // Text fields from FormData
+      const updates = req.body;
 
-      // Optional: If a new file is uploaded, set imageUrl to its path
+      // Normalize genre to always be an array
+      if (updates.genres) {
+        if (!Array.isArray(updates.genres)) {
+          updates.genres = [updates.genres]; // convert string to array
+        }
+      }
+
+      // If a new file is uploaded, set imageUrl to its path
       if (req.file) {
         updates.imageUrl = req.file.path;
       }
 
-      // Find book
+      // Find the book
       const book = await Book.findById(id);
       if (!book) {
         return res.status(404).json({ message: "Book not found" });
       }
 
-      // Verify that the logged-in user is the owner
+      // Check if current user is the owner
       if (book.ownerId.toString() !== req.user._id.toString()) {
         return res
           .status(403)
           .json({ message: "Only the owner can update this book" });
       }
 
-      // Allowed fields update (for example, title, description, etc.)
+      // List of fields allowed to be updated
       const allowedUpdates = [
         "title",
         "author",
-        "genre",
+        "genres",
         "location",
         "description",
         "imageUrl",
       ];
+
       allowedUpdates.forEach((field) => {
         if (updates[field] !== undefined) {
           book[field] = updates[field];
